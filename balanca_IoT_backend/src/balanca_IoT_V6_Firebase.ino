@@ -1,8 +1,7 @@
-// Arquivo inicial balanca_IoT_V4_TESTE
-// Autor: Luiz C M Oliveira
-// Programa funcional da balança_IoT. Realiza a pesagem, exibe o valor e publica na nuvem. 
-// Funcionalidade de função remota para tara da balança. Envia medição para o RealTime database do google Firebase
-// Outubro de 2020
+//Atualizacao do firmware da balancaIoT para adequacao ao BD do FIREBASE
+//Autor: Luiz C M Oliveira
+// 20.11.2020
+
 
 
 // This #include statement was automatically added by the Particle IDE.
@@ -30,11 +29,15 @@ bool atualizar_Medida = true;
 int tareScale(String command);
 
 // Integração com o firebase
-// definição do nome do evento e local de instalação
+// definição do nome do evento, local, apelido e material
 
-const char * eventName2 = "test2data";
-const char * local = "casa marangoni";
+//const char * eventName2 = "medidas";
+//const char * proprietario = "Jeca Teste";
+//const char * local = "Rua San Paul, 38";
+//const char * apelido = "Escola de Artes Suzanus";
+//const char * material = "papel";
 
+const char * scaleID = "5001";
 
 void setup(){
   
@@ -128,17 +131,25 @@ int atualiza_display(String valor)
 
 int publicar_na_nuvem(){
     // Cria o JSON para envio
-	String timeStamp = Time.timeStr();
 	
-    // Cria o JSON para envio - firebase
-    String Data="{\"a\":\""+String(timeStamp)+"\",";         //timestamp
-	        Data+="\"b\":\""+String(medida,2)+"\","; 			    //medida
-	        Data+="\"c\":\""+String(local,14)+"\"}";
-	        //Local
-	        //Data+="\"ts\":\""+String(myWriteAPIKey)+"\"}";		        //api_key thingspeak
-
-		//Publicação na nuvem do JSON
+	//timeStamp = Time.timeStr();
+	
+	// OBS: inclusao do timestamp NÃO está funcionando - problemas na formatação do JSON - VERIFICAR!!!!
+	//      inclusao do identificador da balanca - scaleID - nao funciona adequadamente - se scaleID = 0001, por exemplo, o
+	//      dado não é enviado e todos os campos do JSON ficam vazios. VERIFICAR !!!!
+	
+	
+	char * timeStamp = "2020";
+	//valor de teste
+	
+    // formatacao do JSON para envio
+	char Data[256];
+	snprintf(Data, sizeof(Data), "{\"scaleID\":%s,\"medidaEm\":%s,\"peso\":%.2f}", scaleID, timeStamp, medida);
+	
+	
+    	//Publicação na nuvem do JSON
 		Particle.publish("state", "Nova_medida");
 		//Particle.publish(eventName, Data, PUBLIC);      //publica na nuvem
-		Particle.publish("test2data", Data, PUBLIC);      //publica na nuvem
+		Particle.publish("medidas", Data, PUBLIC);      //publica na nuvem
 }
+    

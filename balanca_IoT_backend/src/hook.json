@@ -1,14 +1,14 @@
 {
-    "event": "test2data",
-    "url": "https://balanca-iot-v2.firebaseio.com/test2data/data.json",
+    "event": "medidas",
+    "url": "https://balanca-iot-v2.firebaseio.com/medidas.json",
     "requestType": "POST",
     "query": {
     	"auth":"ZEEOrXj8jzZNZE1lhPX44rENbFytsABpfPDYHfMR"
     },
     "json": {
-		"data_medida": "{{a}}",
-		"massa": "{{b}}",
-		"local": "{{c}}"
+		"a": "{{a}}",
+		"b": "{{b}}",
+		"c": "{{c}}"
 	},
     "mydevices": true,
     "noDefaults": true
