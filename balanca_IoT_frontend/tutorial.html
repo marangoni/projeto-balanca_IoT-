@@ -1,0 +1,46 @@
+<html>
+
+<head>
+    <title>Balança IoT</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <h1>Real Time Database</h1>
+
+    <ul id="medsList"></ul>
+    <hr>
+    <div class="col-md-4">
+        <form>
+            <div class="form-group">
+                <label for="valorPeso">Peso</label>
+                <input type="number" class="form-control" id="valorPeso" placeholder="Peso">
+            </div>
+            <div class="form-group">
+                <label for="medidaEm">Data da medida</label>
+                <input type="text" class="form-control" id="medidaEm" placeholder="Medida em">
+            </div>
+            <div class="form-group">
+                <label for="balancaId">BalançaID</label>
+                <input type="text" class="form-control" id="balancaId" placeholder="BalançaId">
+            </div>
+        </form>
+        
+        <button class="btn btn-lg btn-block btn-primary" id="addButton">Adicionar</button>
+    </div>
+
+    <br><br>
+    <a class="button button-clear" href="index.html">Voltar para Home</a>
+
+    <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/3.3.0/firebase.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/real-time-database.js"></script>
+</body>
+
+</html>
