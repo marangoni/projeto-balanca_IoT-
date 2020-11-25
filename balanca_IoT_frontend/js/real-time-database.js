@@ -21,6 +21,7 @@ function create(peso, medidaEm, balancaId){
 }
 
 // Função geradora de uma listagem com as medidas no banco de dados
+mostraMedidas = function (){
 firebase.database().ref('medidas').on('value',function (snapshot) {
     medsList.innerHTML = '';
      snapshot.forEach(function (item) {
@@ -28,8 +29,9 @@ firebase.database().ref('medidas').on('value',function (snapshot) {
         li.appendChild(document.createTextNode(item.val().medidaEm + ': ' 
          + item.val().peso + ': ' + item.val().scaleId));
         medsList.appendChild(li);
-    }); 
-});
+        }); 
+    });
+}
 
 /* // Função geradora de uma tabela com as medidas no banco de dados
 firebase.database().ref('medidas').on('value',function (snapshot) {
