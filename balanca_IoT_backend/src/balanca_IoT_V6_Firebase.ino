@@ -1,10 +1,14 @@
-//Atualizacao do firmware da balancaIoT para adequacao ao BD do FIREBASE
-//Autor: Luiz C M Oliveira
-// 20.11.2020
+// Arquivo: balanca_IoT_V6_Firebase
+// Autor: Luiz C M Oliveira
+// Descricao: Programa funcional da balança_IoT. Realiza a pesagem, exibe o valor e publica na nuvem. 
+//            Funcionalidade de função remota para tara da balança. 
+//            Envia medição para o RealTime database do google Firebase
+// Atualização - 02.12.2020: 
+// - Corrigido o envio de informação de timeStamp para o webhook;
+// - Formatação do timestamp corrigida com a função time.format();
+// - Adicionado bloqueio de envio de webhook em duplicata;
+// - Ajuste das temporizações de medição para evitar envio de informações de "transição" de peso
 
-
-
-// This #include statement was automatically added by the Particle IDE.
 #include <LiquidCrystal_I2C_Spark.h>
 #include <HX711ADC.h>
 
@@ -25,25 +29,20 @@ float calibration_factor = 17130;
 double medida = 0;
 double medida_anterior = 0;
 bool atualizar_Medida = true;
+bool timerFlag = true;              //Flag indica que nova medida pode ser feita
+bool pubFlag = true;                //Flag que indica que foi feita uma publicaçao
 
 int tareScale(String command);
 
-// Integração com o firebase
-// definição do nome do evento, local, apelido e material
-
-//const char * eventName2 = "medidas";
-//const char * proprietario = "Jeca Teste";
-//const char * local = "Rua San Paul, 38";
-//const char * apelido = "Escola de Artes Suzanus";
-//const char * material = "papel";
-
 const char * scaleID = "5001";
+
+int startTime = 0;
 
 void setup(){
   
-  Serial.begin(9600);                       // monitor serial 9600 Bps
-  Particle.variable("medida", medida);
-  Particle.function("tareScale", tareScale);
+  // Depuração via monitor serial
+  Serial.begin(9600);                               
+         
   scale.begin();                            // inicializa balanca
   scale.set_scale(calibration_factor);      // ajusta fator de escala
   
@@ -53,15 +52,36 @@ void setup(){
   lcd->backlight();
   lcd->clear();
   
-  Time.zone(-3.00);
-
- 
+  // Funções na nuvem
+  Time.zone(-3.00);                                 // Ajusta horário conforme horário brasileiro - GMT-3h
+  Particle.function("tareScale", tareScale);        // Cria uma função para fazer a tara da balança via pela particle Cloud
+  
   //Serial.println(scale.get_units());
   scale.tare();
-  DEBUG_PRINT("Balanca zerada");
+  DEBUG_PRINT("Tara da Balanca...");
+  lcd->setCursor(0 ,0 );
+  lcd->print("Tara da balanca...");
+  
+  // aguarda 3s
+  startTime = millis();
+        while(true){
+        if(millis()-startTime >= 3000){
+      break;
+        }
+    }
+  
+  lcd->clear();  
   lcd->setCursor(1 ,0 );
   lcd->print("Balanca zerada");
-  delay(5000);
+  
+  // aguarda 3s
+  startTime = millis();
+        while(true){
+        if(millis()-startTime >= 3000){
+      break;
+        }
+    }
+  
   lcd->clear();
   lcd->setCursor(6 ,0 );
   lcd->print("Peso");
@@ -75,45 +95,65 @@ void loop(){
   scale.power_up();
   //Verifica se houve mudança no valor medido
     medida = (scale.get_units(10));
-   
+    
+    // Evita envio de medidas negativas - verificar fator de calibração para tentar resolver esta questão
     if(medida<0){medida=0;}
     
-    if(medida > medida_anterior+0.2 || medida < medida_anterior - 0.2 ){
-    // Se houve alteração da medição em +-0.2 kg => nova medida!
+    if((medida > medida_anterior+0.2 || medida < medida_anterior - 0.2 ) && (timerFlag == true)){
+    // Se houve alteração da medição em +-0.2 kg e o passou o tempo entre medidas => nova medida!
         Particle.publish("weightChange");
         atualizar_Medida = true;
   }
    
     if (atualizar_Medida == true){
         medida_anterior = medida;
-        DEBUG_PRINT(String(medida,2));
+        //DEBUG_PRINT(String(medida,2));
         atualiza_display(String(medida,2));
         atualizar_Medida = false;
-        publicar_na_nuvem();
+        
+        //Evita publicação na nuvem em  duplicata
+        if (pubFlag == true){
+                publicar_na_nuvem();
+                //DEBUG_PRINT("Publicou na nuvem");
+                pubFlag = false;
+        }
     }
   
    scale.power_down();
-    //delay(500);
+   
+   // Repete o loop a cada 1s
     int startTime = millis();
         while(true){
-        if(millis()-startTime >= 500){
-      break;
+        if(millis()-startTime >= 1000){
+            timerFlag = true;
+            pubFlag = true;
+            break;
         }
+        timerFlag = false;
     }
 }
 
+
+// Funcao na nuvem para executar a tara da balança
 int tareScale(String command)
 {
   scale.tare();
   delay(100);
-  Serial.println("Tara da balanca pela nuvem!!");
-  DEBUG_PRINT("Tara da balanca");
+  //Serial.println("Tara da balanca pela nuvem!!");
+  //DEBUG_PRINT("Tara da balanca");
    lcd->clear();
    lcd->setCursor(0 ,0 );
    lcd->print("Tara da balanca");
    lcd->setCursor(0 ,1 );
    lcd->print(" pela nuvem!");
-   delay(2000);
+   
+    int startTime = millis();
+        while(true){
+        if(millis()-startTime >= 200){
+      break;
+        }
+    }
+   
    atualiza_display(String(medida,2));
  return 1;
 }
@@ -131,25 +171,13 @@ int atualiza_display(String valor)
 
 int publicar_na_nuvem(){
     // Cria o JSON para envio
+	String timeStamp = Time.timeStr();
+    timeStamp = Time.format("%d/%m/%y %H:%M:%S");	
 	
-	//timeStamp = Time.timeStr();
+	String Data="{\"scaleID\":\""+String(scaleID)+"\",";        //iD_balanca
+	        Data+="\"medidaEm\":\""+String(timeStamp)+"\","; 	//Data da medicao
+		    Data+="\"peso\":\""+String(medida,2)+"\"}";			//valor da medida    
+	        
+	Particle.publish("medidas", Data, PUBLIC);      //publica medida na nuvem
 	
-	// OBS: inclusao do timestamp NÃO está funcionando - problemas na formatação do JSON - VERIFICAR!!!!
-	//      inclusao do identificador da balanca - scaleID - nao funciona adequadamente - se scaleID = 0001, por exemplo, o
-	//      dado não é enviado e todos os campos do JSON ficam vazios. VERIFICAR !!!!
-	
-	
-	char * timeStamp = "2020";
-	//valor de teste
-	
-    // formatacao do JSON para envio
-	char Data[256];
-	snprintf(Data, sizeof(Data), "{\"scaleID\":%s,\"medidaEm\":%s,\"peso\":%.2f}", scaleID, timeStamp, medida);
-	
-	
-    	//Publicação na nuvem do JSON
-		Particle.publish("state", "Nova_medida");
-		//Particle.publish(eventName, Data, PUBLIC);      //publica na nuvem
-		Particle.publish("medidas", Data, PUBLIC);      //publica na nuvem
 }
-    
