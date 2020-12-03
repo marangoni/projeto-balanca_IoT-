@@ -4,13 +4,12 @@
 //            Funcionalidade de função remota para tara da balança. 
 //            Envia medição para o RealTime database do google Firebase
 // Atualização - 02.12.2020: 
-// - Corrigido o envio de informação de timeStamp para o webhook;
-// - Formatação do timestamp corrigida com a função time.format();
-// - Adicionado bloqueio de envio de webhook em duplicata;
-// - Ajuste das temporizações de medição para evitar envio de informações de "transição" de peso
+// - Obtençao do identificador da balança a partir da funcao System.deviceID()
 
 #include <LiquidCrystal_I2C_Spark.h>
 #include <HX711ADC.h>
+#include <SparkJson.h>
+
 
 #define DEBUG_PRINT(...) { Particle.publish( "DEBUG", String::format(__VA_ARGS__) ); }
 
@@ -33,8 +32,6 @@ bool timerFlag = true;              //Flag indica que nova medida pode ser feita
 bool pubFlag = true;                //Flag que indica que foi feita uma publicaçao
 
 int tareScale(String command);
-
-const char * scaleID = "5001";
 
 int startTime = 0;
 
@@ -172,12 +169,14 @@ int atualiza_display(String valor)
 int publicar_na_nuvem(){
     // Cria o JSON para envio
 	String timeStamp = Time.timeStr();
-    timeStamp = Time.format("%d/%m/%y %H:%M:%S");	
+  timeStamp = Time.format("%d/%m/%y %H:%M:%S");	
+	String scaleID = System.deviceID();
 	
-	String Data="{\"scaleID\":\""+String(scaleID)+"\",";        //iD_balanca
+	
+	String Data="{\"scaleID\":\""+ scaleID +"\",";              //iD_balanca
 	        Data+="\"medidaEm\":\""+String(timeStamp)+"\","; 	//Data da medicao
 		    Data+="\"peso\":\""+String(medida,2)+"\"}";			//valor da medida    
 	        
-	Particle.publish("medidas", Data, PUBLIC);      //publica medida na nuvem
+	Particle.publish("medidas", Data, PUBLIC);                  //publica medida na nuvem
 	
 }

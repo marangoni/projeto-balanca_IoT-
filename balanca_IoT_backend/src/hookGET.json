@@ -1,0 +1,11 @@
+{
+    "event": "getScaleId",
+    "url": "https://balanca-iot-v2.firebaseio.com/balancas.json",
+    "requestType": "GET",
+    "query": {
+    	"auth":"ZEEOrXj8jzZNZE1lhPX44rENbFytsABpfPDYHfMR"
+    },
+    "mydevices": true,
+    "noDefaults": true
+}
+
