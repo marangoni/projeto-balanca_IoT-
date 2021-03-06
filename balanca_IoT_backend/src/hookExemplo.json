@@ -1,15 +1,16 @@
 {
-    "event": "nova_medida",
+    "event": "test1data",
     "url": "https://testiot-255915-default-rtdb.firebaseio.com/medidas.json",
     "requestType": "POST",
     "query": {
     	"auth":"khM602wf9MlRpJeVQJf9mvRp6dQyvMcNbLMWvbGz"
     },
     "json": {
-		"scaleID": "{{scaleID}}",
-		"medidaEm": "{{medidaEm}}",
-		"peso": "{{peso}}"
-	},
+		"a": "{{a}}",
+		"b": "{{b}}",
+		"c": "{{c}}",
+		"ts": "{{PARTICLE_PUBLISHED_AT}}"
+    },
     "mydevices": true,
     "noDefaults": true
 }
