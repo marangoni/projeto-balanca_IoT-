@@ -1,14 +1,10 @@
 // Arquivo: balanca_IoT_FSM
 // Autor: Luiz C M Oliveira
-// Descricao: Versao funcional da balancaIoT modelada por FSM - máquina de estados.
-//            - Modelada conforme FSM (parcial - precisa ainda ser melhorado)
-//            - Salva e recupera valores medidos da eeprom (se desligar guarda os valores)
-//            - Rotina de verificação de novas medidas ou ruido implementada -check_medida
-//            - Rotinas de exibicao de dados no display aprimoradas (precisam melhorias - retirar delay)
-//            - implementa Estado de reset da lixeira (está inicialmente ativada - lixeira inicia zerada)
-//            - Ajustada temporização para uma unica publicação na nuvem e base de dados - ESTADO_PUBLICA_EVENTO
-//
-// Atualização - 05.03.2020: 
+// Descricao: 
+//    - Atualização do json para publicação das medidas POR DISPOSITIVO
+//    - Correção do banco de dados - firebase
+//    - Correção do hook.json para criação da integração
+// Atualização - 08.03.2020: 
 //
 
 #include "Particle.h"
@@ -35,6 +31,9 @@ double medida = 0;
 double medida_anterior = 0;
 bool nova_medida = false;           //Flag que indica que houve alteração na medida
 int startTime = 0;
+
+//Dados para identificação da balanca no BD
+String deviceName;
 
 String Data;
 
@@ -77,6 +76,8 @@ int atualiza_display(String valor);         // atualizaçao da medida no display
 bool check_med(double med, double med_ant); // verificacao de nova medida
 int salva_medida_EEPROM(double med);        // salva nova medida na eeprom
 double le_medida_EEPROM();                  // le medida na eeprom
+void deviceNameHandler(const char *topic, const char *data);        //cria nome do dispositivo para json
+
 
 void setup() {
     Log.info("Executando void setup()...");
@@ -101,6 +102,9 @@ void loop() {
             // Espera que a conexao a nuvem do particle seja resolvida
             if (Particle.connected()) {
                 Log.info("conectado a nuvem em %lu ms", millis() - stateTime);
+                Particle.subscribe("spark/", deviceNameHandler);    //obtem nome do dispositivo na nuvem
+	            Particle.publish("spark/device/name");
+                Log.info("dispositivo: ", String(deviceName.c_str()));
                 lcd->clear();
                 lcd->setCursor(3,0);
                 lcd->print("Conectado!");
@@ -156,11 +160,15 @@ void loop() {
             Log.info("ESTADO_PUBLICA_EVENTO"); 
             
             montar_json();
+            Log.info(Data);
 
             if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
 		        lastPublish = millis();
-		        publishFuture = Particle.publish("nova_medida", Data, PRIVATE | WITH_ACK);
-                Log.info("publicando...", Data);
+		        if (deviceName.length() > 0) {
+                    
+                    publishFuture = Particle.publish("nova_medida", Data, PRIVATE | WITH_ACK);
+                    Log.info("publicando...", Data);
+                }
                 stateTime = millis();
             }
             // When checking the future, the isDone() indicates that the future has been resolved, 
@@ -324,10 +332,11 @@ int montar_json(){
 
 	String scaleID = System.deviceID();
 	
-    Data="{\"scaleID\":\""+ scaleID +"\",";              //iD_balanca
-           Data+="\"medidaEm\":\""+String(timeStamp)+"\","; 	//Data da medicao
-           Data+="\"peso\":\""+String(medida,2)+"\"}";			//valor da medida    
-                        
+    Data="{\"scaleID\":\""+ scaleID +"\",";                     //iD_balanca
+    Data+="\"medidaEm\":\""+String(timeStamp)+"\","; 	//Data da medicao
+    Data+="\"peso\":\""+String(medida,2)+"\",";         //valor da medida
+    Data+="\"n\":\"" + String(deviceName.c_str())+"\"}";			//nome do dispositivo    
+    
  return 0;
 	//Particle.publish("medidas", Data, PUBLIC);   
 }
@@ -364,4 +373,8 @@ double le_medida_EEPROM()
         medida = 0;
     }
     return medida;
+}
+
+void deviceNameHandler(const char *topic, const char *data) {
+	deviceName = data;
 }

@@ -1,0 +1,16 @@
+{
+    "event": "test2data",
+    "url": "https://test1-c0b7e.firebaseio.com/test2data/{{n}}.json",
+    "requestType": "POST",
+    "query": {
+    	"auth":"vuZ30Pobxoq8BwfYuzrQJjxqMq7F2HRPUBt0FOyY"
+    },
+    "json": {
+		"a": "{{a}}",
+		"b": "{{b}}",
+		"c": "{{c}}",
+		"ts": "{{PARTICLE_PUBLISHED_AT}}"
+    },
+    "mydevices": true,
+    "noDefaults": true
+}
