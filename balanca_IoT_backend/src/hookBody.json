@@ -1,0 +1,14 @@
+{
+    "event": "medidas",
+    "url": "https://balanca-iot-v2.firebaseio.com/medidas.json",
+    "requestType": "POST",
+    "headers": {
+    	"Content-Type":"application/json"
+    },
+    "query": {
+    	"auth":"ZEEOrXj8jzZNZE1lhPX44rENbFytsABpfPDYHfMR"
+    },
+    "body":"{\"scaleID\":{{scaleID}}, \"medidaEm\":{{medidaEm}}, \"peso\":{{peso}}\" }", 
+    "mydevices": true,
+    "noDefaults": true
+}

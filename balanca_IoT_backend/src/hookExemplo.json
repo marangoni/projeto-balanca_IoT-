@@ -1,0 +1,16 @@
+{
+  "event": "nova_medidaT",
+  "url": "https://testiot-255915-default-rtdb.firebaseio.com/test2data/{{n}}.json",
+  "requestType": "POST",
+  "query": {
+    "auth":"khM602wf9MlRpJeVQJf9mvRp6dQyvMcNbLMWvbGz"
+  },
+  "json": {
+  "a": "{{a}}",
+  "b": "{{b}}",
+  "c": "{{c}}",
+  "ts": "{{PARTICLE_PUBLISHED_AT}}"
+  },
+  "mydevices": true,
+  "noDefaults": true
+}
