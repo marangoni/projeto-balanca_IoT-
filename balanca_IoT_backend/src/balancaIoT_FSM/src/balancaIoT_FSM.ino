@@ -1,13 +1,10 @@
 // Arquivo: balanca_IoT_FSM
 // Autor: Luiz C M Oliveira
 // Descricao: 
-//    - Fator de calibração correto
-//    - Implementacao de rotina check_RESET - RESET após 10s de medidas zeradas
-//    - Correção do hook.json para criação da integração
-//    - Criação da rotina para montar o json quando houver o reset
-//    - Inclusão de rotinas para detecção de nova medida e de reset
-//    - Limitação do número de pubicações repetidas
-// Atualização - 10.03.2020: 
+//    - Implementacao de rotina para condicionamento das medidas - get_med
+//    - Inclusão da rotina de exibição no display msg (ainda com delay para ser removido)
+//   
+// Atualização - 12.03.2020: 
 //
 
 #include "Particle.h"
@@ -23,29 +20,33 @@ LiquidCrystal_I2C *lcd;
 
 HX711ADC scale(DT,SCK);
 
+
+///**** Dados de operação da balança - POSTERIORMENTE DEVEM SER RECUPERADOS DO BD da aplicação
+
 //fator de calibração ***** Importante para medidas corretas. Verificar conforme a balanca     
-float calibration_factor = 13090; //balanca 150 kg - balanca_iot2
-//float calibration_factor = 1132650; //balanca 1kg - GEPIC1
+//float calibration_factor = 11210; //balanca 150 kg - balanca_iot2
+float calibration_factor = 1132650; //balanca 1kg - GEPIC1
 
 const unsigned long PUBLISH_PERIOD_MS = 60000;  //periodo entre publicações 60s
 const unsigned long FIRST_PUBLISH_MS = 5000;    //primeira publicacao com 5s
-unsigned long lastPublish = FIRST_PUBLISH_MS - PUBLISH_PERIOD_MS;
 
 const unsigned long PERIODO_MEDIDA_MS = 5000;  //periodo entre medidas 5s   //versao final ajustar este valor para um intervalo maior
 const unsigned long PRIMEIRA_MEDIDA = 500;     //primeira medida 0,5s
-unsigned long lastMed = PRIMEIRA_MEDIDA - PERIODO_MEDIDA_MS;
 
 const unsigned long PERIODO_ULTIMO_RESET_MS = 60000;  //periodo verificacao RESET - 60s (versao final ajustar valor para 2h ou mais)
 const unsigned long PRIMEIRO_RESET = 500;             //primeiro reset 0,5s
+//********************************************************************************************
+
+unsigned long lastPublish = FIRST_PUBLISH_MS - PUBLISH_PERIOD_MS;
+unsigned long lastMed = PRIMEIRA_MEDIDA - PERIODO_MEDIDA_MS;
 unsigned long lastRST = PRIMEIRO_RESET - PERIODO_ULTIMO_RESET_MS;
 
 double medida = 0;
 double medida_anterior = 0;
 bool nova_medida = false;           //Flag que indica que houve alteração na medida
-bool reset_da_balanca = false;
+bool reset_da_balanca = false;      //Flag que indica que houve esvaziamento da balanca (RESET)
 int startTime = 0;
-int count = 0;                      //contador 
-
+int count = 0;                     
 
 //Dados para identificação da balanca no BD
 String deviceName;
@@ -86,7 +87,6 @@ particle::Future<bool> publishFuture;
 int init_display();                         // inicializa display
 int init_scale();                           // inicializa balança
 int config_display();                       // configuraçao do display LCD - peso e kg
-int msg_inicial();                          // abertura do programa 
 int montar_json();                          // montagem do json para publicacao
 int montar_json_reset();                    // montagem do json de reset da balanca
 int atualiza_display(String valor);         // atualizaçao da medida no display
@@ -95,21 +95,22 @@ int salva_medida_EEPROM(double med);        // salva nova medida na eeprom
 double le_medida_EEPROM();                  // le medida na eeprom
 void deviceNameHandler(const char *topic, const char *data);        //cria nome do dispositivo para json
 bool check_reset(double med, double med_ant); // verifica se houve reset
+double get_med(int n_amostras);                           // Funcao para obter e condicionar as medidas da balanca
+bool msg(int n_linhas, int tempo_MS, String linha1, String linha2); //Funcao para escrita no display
+
 
 void setup() {
     Log.info("Executando void setup()...");
     Serial.begin(9600);
     medida_anterior = le_medida_EEPROM();
     init_display();
-    msg_inicial();
+    msg(2,5000,"GEPIC","Balanca IoT1.0");
     init_scale();
-    lcd->clear();
-    lcd->setCursor(2,0);
-    lcd->print("Conectando...");
+    msg(1,0,"Conectando...","");
     Particle.connect();      // Conecta particle a nuvem
     Time.zone(-3.00);        // Ajusta horário conforme horário brasileiro - GMT-3h
     stateTime = millis();
-    estado = ESTADO_INIT;  //Inicializa a balanca
+    estado = ESTADO_INIT;   //Inicializa a balanca
 }
 
 void loop() {
@@ -122,11 +123,7 @@ void loop() {
                 Particle.subscribe("spark/", deviceNameHandler);    //obtem nome do dispositivo na nuvem
 	            Particle.publish("spark/device/name");
                 Log.info("dispositivo: ", String(deviceName.c_str()));
-                lcd->clear();
-                lcd->setCursor(3,0);
-                lcd->print("Conectado!");
-                delay(2000);                        //remover para não "bloquear o codigo"
-                lcd->clear();
+                msg(1,2000,"Conectado!","");
                 config_display();                   //display peso ok
                 estado = ESTADO_EM_OPERACAO;
                 Log.info("Indo para estado_em_operacao"); 
@@ -135,10 +132,7 @@ void loop() {
             if (millis() - stateTime >= connectMaxTime.count()) {
                 // Se demorar muito para conectar exibe mensagem de falha e vai para hibernação (SLEEP)
                 Log.info("falha de conexao, indo dormir");
-                lcd->clear();
-                lcd->setCursor(0,0);
-                lcd->print("Falha na conexao!");
-                delay(2000);    //remover para não "bloquear o codigo"
+                msg(1,2000,"Falha na conexao","");
                 estado = ESTADO_SLEEP;
                 Log.info("Indo para estado_sleep"); 
             }
@@ -152,7 +146,8 @@ void loop() {
              // Há como melhorar este código... esta bloqueando o programa o tempo todo 
              // para verificar nova_medida (PROXIMAS MELHORIAS)
 
-             medida = (scale.get_units(3));
+              medida = get_med(20);
+            
              if(medida<0){medida=0;}                           //condiciona medidas negativas
              
             Log.info("medida " + String(medida));
@@ -263,27 +258,18 @@ void loop() {
             medida = 0;
             medida_anterior = 0;
             salva_medida_EEPROM(medida);
-            lcd->clear();
-            lcd->setCursor(3,0);
-            lcd->print("Esvaziando");
-            lcd->setCursor(4,1);
-            lcd->print("lixeira");
-            delay(3000);        //remover para não bloquear o programa
+            msg(2,3000,"Esvaziando","lixeira");
             
-            //publica evento reset
-            montar_json_reset();
+            //montajson e publica evento reset           
+            montar_json_reset();    //rotina deve ser verificada pois apaga os demais campos da tabela status
             
-            //Particle.publish("Reset da balanca");
-            //publishFuture = Particle.publish("novo_reset", Data_reset, PRIVATE | WITH_ACK);
-             if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
+            if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
 		         lastPublish = millis();
 		         if (deviceName.length() > 0) {
-                    
                      publishFuture = Particle.publish("novo_reset", Data_reset, PRIVATE | WITH_ACK);
                      Log.info("publicando evento reset...", Data_reset);
                  }
-            //     //stateTime = millis();
-             }
+            }
             
             estado = ESTADO_EM_OPERACAO;
             Log.info("Indo para estado_em_operacao"); 
@@ -324,18 +310,19 @@ int init_scale()
     scale.set_scale(calibration_factor);      // ajusta fator de escala
     //Executa a tara da balanca
     scale.tare();
-    lcd->clear();
-    lcd->setCursor(3 ,0 );
-    lcd->print("Executando");
-    lcd->setCursor(5 ,1 );
-    lcd->print("tara...");
-    // aguarda 3s
-    startTime = millis();
-          while(true){
-            if(millis()-startTime >= 3000){
-                break;
-            }
-        }
+    msg(2,3000,"Executando","tara...");
+    // lcd->clear();
+    // lcd->setCursor(3 ,0 );
+    // lcd->print("Executando");
+    // lcd->setCursor(5 ,1 );
+    // lcd->print("tara...");
+    // // aguarda 3s
+    // startTime = millis();
+    //       while(true){
+    //         if(millis()-startTime >= 3000){
+    //             break;
+    //         }
+    //     }
     lcd->clear();
     return 0;
 }
@@ -349,23 +336,6 @@ int config_display()
     lcd->print(String(medida_anterior,2));
     lcd->setCursor(10 ,1);
     lcd->print("kg");
-    return 0;
-}
-
-int msg_inicial()
-{
-    lcd->clear();
-    lcd->setCursor(5,0);
-    lcd->print("GEPIC");
-    lcd->setCursor(1,1);
-    lcd->print("IoT Scale 1.0");
-    // aguarda 5s
-    startTime = millis();
-          while(true){
-            if(millis()-startTime >= 5000){
-                break;
-            }
-        }
     return 0;
 }
 
@@ -415,7 +385,8 @@ Log.info("check_reset");
 if(med<0.001){med=0;}
     if(med==0 && med_ant==0){
         delay(3000);
-        med = scale.get_units(3); //Aós 3s verifica balanca novamente
+        //med = get_med(); //Após 3s verifica balanca novamente
+        med = get_med(20);
         if(med<0.001){med=0;}
         Log.info("check_reset");
         Log.info(String(med,2));
@@ -453,3 +424,52 @@ double le_medida_EEPROM()
 void deviceNameHandler(const char *topic, const char *data) {
 	deviceName = data;
 }
+
+double get_med(int no_amostras){
+    double med = 0;
+    double resultado = 0;
+    int count=0;
+        
+    while(count < no_amostras){
+        med = med + scale.get_units(3);
+        count++;
+        delay(10); //tempo entre medidas 
+     }
+    resultado = med/no_amostras;      //Calcula media das medidas
+    return resultado;
+}
+
+bool msg(int n_linhas, int tempo_MS, String linha1, String linha2){
+
+    int size1 = 0;
+    int size2 = 0;
+    int pos1 =0;
+    int pos2 =0;
+
+    size1 = linha1.length();
+    size2 = linha2.length();
+    pos1 = (16 - size1)/2;
+    pos2 = (16 - size2)/2;
+
+    lcd->clear();
+    switch(n_linhas) {
+        case 1:
+        lcd->setCursor(pos1,0);
+        lcd->print(linha1);
+        break;
+
+        case 2:
+        lcd->setCursor(pos1,0);
+        lcd->print(linha1);
+        lcd->setCursor(pos2,1);
+        lcd->print(linha2);
+        break;
+    }
+    if(tempo_MS!=0){//se nao for especificado tempo, nao apaga o display
+        delay(tempo_MS);
+        lcd->clear();
+        return true;
+    }
+    return true;
+}
+
