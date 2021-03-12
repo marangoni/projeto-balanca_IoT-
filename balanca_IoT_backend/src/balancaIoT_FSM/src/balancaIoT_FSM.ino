@@ -57,8 +57,11 @@ String Data_reset;
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-//Utilizar conversor serial->USB FT232 para visualizar logs
-Serial1LogHandler logHandler(115200);
+//Se Utilizar conversor serial->USB FT232 para visualizar logs habilitar esta linha
+//Serial1LogHandler logHandler(115200);
+
+//Se nao, habilitar essa
+SerialLogHandler logHandler;
 
 const std::chrono::milliseconds connectMaxTime = 6min;
 const std::chrono::seconds sleepTime = 1min;
@@ -99,6 +102,12 @@ double get_med(int n_amostras);                           // Funcao para obter e
 bool msg(int n_linhas, int tempo_MS, String linha1, String linha2); //Funcao para escrita no display
 
 
+
+// *** Rotina para tratar indicaçao pelo LED
+STARTUP(RGB.mirrorTo(A4, A5, A7));
+LEDStatus blinkBlue(RGB_COLOR_BLUE, LED_PATTERN_BLINK, LED_SPEED_NORMAL, LED_PRIORITY_IMPORTANT);
+LEDStatus blinkGreen(RGB_COLOR_GREEN, LED_PATTERN_BLINK, LED_SPEED_NORMAL, LED_PRIORITY_IMPORTANT);
+
 void setup() {
     Log.info("Executando void setup()...");
     Serial.begin(9600);
@@ -111,9 +120,13 @@ void setup() {
     Time.zone(-3.00);        // Ajusta horário conforme horário brasileiro - GMT-3h
     stateTime = millis();
     estado = ESTADO_INIT;   //Inicializa a balanca
+    
 }
 
 void loop() {
+    //blinkBlue.setActive(false);
+    //blinkGreen.setActive(false);
+
     switch(estado) {
         case ESTADO_INIT:
             Log.info("Estado init");
@@ -139,6 +152,9 @@ void loop() {
             break;
 
         case ESTADO_EM_OPERACAO:
+             //blinkBlue.setActive(true);
+             //delay(3000);
+                          
              Log.info("ESTADO_EM_OPERACAO");            
              medida_anterior = le_medida_EEPROM();
              atualiza_display(String(medida_anterior,2));
@@ -217,6 +233,7 @@ void loop() {
                 
                 if (publishFuture.isSucceeded()) {      //Se a publicacao foi bem sucedida
                     Log.info("publicacao ok");
+                    //blinkGreen.setActive(true);
                     estado = ESTADO_EM_OPERACAO;
                     Log.info("Indo para estado_em_operacao"); 
                 }
