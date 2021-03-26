@@ -1,15 +1,16 @@
 // Arquivo: balanca_IoT_FSM
 // Autor: Luiz C M Oliveira
 // Descricao: 
-//    - Implementacao de rotina para condicionamento das medidas - get_med
-//    - Inclusão da rotina de exibição no display msg (ainda com delay para ser removido)
-//   
-// Atualização - 12.03.2020: 
-//
+// - Utilizacao da rotina - arduinoJson versao 5.13.5 (só funciona com versao 5.*.*)   
+// - Implementação da rotina para leitura dos parametros de funcionamento do BD
+//    
+// Atualização - 17.03.2020: 
+//----------------------------------------------------------------------------------
 
 #include "Particle.h"
 #include <LiquidCrystal_I2C_Spark.h>
 #include <HX711ADC.h>
+#include <ArduinoJson.h>
 
 //Display LCD
 LiquidCrystal_I2C *lcd;
@@ -27,14 +28,14 @@ HX711ADC scale(DT,SCK);
 //float calibration_factor = 11210; //balanca 150 kg - balanca_iot2
 float calibration_factor = 1132650; //balanca 1kg - GEPIC1
 
-const unsigned long PUBLISH_PERIOD_MS = 60000;  //periodo entre publicações 60s
-const unsigned long FIRST_PUBLISH_MS = 5000;    //primeira publicacao com 5s
+unsigned long PUBLISH_PERIOD_MS = 60*60000;  //periodo entre publicações 60 * 60s = 1hora
+unsigned long FIRST_PUBLISH_MS = 5000;    //primeira publicacao com 5s
 
-const unsigned long PERIODO_MEDIDA_MS = 5000;  //periodo entre medidas 5s   //versao final ajustar este valor para um intervalo maior
-const unsigned long PRIMEIRA_MEDIDA = 500;     //primeira medida 0,5s
+unsigned long PERIODO_MEDIDA_MS = 60*60000;  //periodo entre medidas 5s   //versao final ajustar este valor para um intervalo maior
+unsigned long PRIMEIRA_MEDIDA = 500;     //primeira medida 0,5s
 
-const unsigned long PERIODO_ULTIMO_RESET_MS = 60000;  //periodo verificacao RESET - 60s (versao final ajustar valor para 2h ou mais)
-const unsigned long PRIMEIRO_RESET = 500;             //primeiro reset 0,5s
+unsigned long PERIODO_ULTIMO_RESET_MS = 8*60*60000;  //periodo verificacao RESET - A cada 8 *60 *60000 = 8h 
+unsigned long PRIMEIRO_RESET = 500;             //primeiro reset 0,5s
 //********************************************************************************************
 
 unsigned long lastPublish = FIRST_PUBLISH_MS - PUBLISH_PERIOD_MS;
@@ -53,9 +54,12 @@ String deviceName;
 
 String Data;
 String Data_reset;  
+String Data_load;
 
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
+
+//***IMPORTANTE PARA DEPURACAO **** - Ajuste as linhas abaixo conforme dispositivo em teste
 
 //Se Utilizar conversor serial->USB FT232 para visualizar logs habilitar esta linha
 //Serial1LogHandler logHandler(115200);
@@ -101,6 +105,12 @@ bool check_reset(double med, double med_ant); // verifica se houve reset
 double get_med(int n_amostras);                           // Funcao para obter e condicionar as medidas da balanca
 bool msg(int n_linhas, int tempo_MS, String linha1, String linha2); //Funcao para escrita no display
 
+// Forward declarations
+void getDataHandler(const char *topic, const char *data);
+
+const unsigned long CHECK_PERIOD_MS = 60000;
+const unsigned long FIRST_CHECK_MS = 5000;
+const char *CHECK_EVENT_NAME = "load_variables";
 
 
 // *** Rotina para tratar indicaçao pelo LED
@@ -126,18 +136,34 @@ void setup() {
 void loop() {
     //blinkBlue.setActive(false);
     //blinkGreen.setActive(false);
-
+    
+    //gera evento atualizacao parametros
+    // Melhorias: Deve ser colocado dentro de um estado INIT ou inicialização
+    //          : Ainda gera confusão se houver mais de uma balança, verificar
+     
+    if (millis() - lastPublish >= PUBLISH_PERIOD_MS) {
+	 	    lastPublish = millis();
+         	Data_load ="{\"n\":\"" + String(deviceName.c_str())+"\"}";  //nome do dispositivo
+            Particle.publish(CHECK_EVENT_NAME, Data_load, PRIVATE);  //obtem parametros do dispositivo da nuvem
+	        Log.info(String(calibration_factor));
+            scale.set_scale(calibration_factor); //atualiza fator de calibração da balanca (verificar depois)
+            Log.info(String(PERIODO_MEDIDA_MS)); 
+         }
+        
+  
     switch(estado) {
+           
         case ESTADO_INIT:
             Log.info("Estado init");
             // Espera que a conexao a nuvem do particle seja resolvida
             if (Particle.connected()) {
                 Log.info("conectado a nuvem em %lu ms", millis() - stateTime);
-                Particle.subscribe("spark/", deviceNameHandler);    //obtem nome do dispositivo na nuvem
-	            Particle.publish("spark/device/name");
-                Log.info("dispositivo: ", String(deviceName.c_str()));
+                Particle.subscribe("spark/", deviceNameHandler);    
+	            Particle.publish("spark/device/name"); //obtem nome do dispositivo na nuvem
                 msg(1,2000,"Conectado!","");
                 config_display();                   //display peso ok
+                Log.info("Obtendo parametros de funcionamento do DB...");
+                Particle.subscribe("hook-response/load_variables", getDataHandler, MY_DEVICES);
                 estado = ESTADO_EM_OPERACAO;
                 Log.info("Indo para estado_em_operacao"); 
             }
@@ -328,18 +354,6 @@ int init_scale()
     //Executa a tara da balanca
     scale.tare();
     msg(2,3000,"Executando","tara...");
-    // lcd->clear();
-    // lcd->setCursor(3 ,0 );
-    // lcd->print("Executando");
-    // lcd->setCursor(5 ,1 );
-    // lcd->print("tara...");
-    // // aguarda 3s
-    // startTime = millis();
-    //       while(true){
-    //         if(millis()-startTime >= 3000){
-    //             break;
-    //         }
-    //     }
     lcd->clear();
     return 0;
 }
@@ -488,5 +502,22 @@ bool msg(int n_linhas, int tempo_MS, String linha1, String linha2){
         return true;
     }
     return true;
+}
+
+void getDataHandler(const char *topic, const char *data) {
+	StaticJsonBuffer<256> jsonBuffer;
+	char *mutableCopy = strdup(data);
+	JsonObject& root = jsonBuffer.parseObject(mutableCopy);
+	free(mutableCopy);
+
+	// Serial.printlnf("data: %s", data);
+
+	// Because of the way the webhooks work, all data, including numbers, are represented as
+	// strings, so we need to convert them back to their native data type here
+    calibration_factor = atoi(root["fatorCalibracao"]);
+	PERIODO_MEDIDA_MS = atoi(root["intervaloMedidasMS"]);
+    PUBLISH_PERIOD_MS = atoi(root["intervaloPublish"]);
+    PERIODO_ULTIMO_RESET_MS = atoi(root["intervaloResetMS"]);
+  
 }
 
